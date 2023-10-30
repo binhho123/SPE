@@ -8,7 +8,7 @@ lamda = 1/6
 mu = 1/20
 c = 5
 department_num = 3
-simulation_time = 60000
+simulation_time = 100
 maxCapacity = 100
 population = 10000
 randarray = np.arange(0, department_num, 1)
@@ -33,7 +33,7 @@ class Server:
         self.standBy = None
         self.idleTime = 0
         self.jobDone = 0
-        env.process(self.serve())
+        self.env.process(self.serve())
 
     def serve(self):
 
@@ -47,25 +47,24 @@ class Server:
                 self.waitingTime += env.now - self.job.arrtime
                 t = env.now
                 yield self.env.timeout(self.job.duration)
-                print('done')
                 self.servingTime += env.now - t
                 self.jobDone += 1
                 self.job = None
-                department[self.service].availableStatus[self.server_id] = 1
+                serviceDepartments[self.service].availableStatus[self.server_id] = 1
 
     def waiting(self, env):
             try:
                 yield env.timeout(simulation_time)
-
             except simpy.Interrupt as i:
-                print('ready to serve')
+                pass
 
 class Department:
     def __init__(self, env, service, maxCapacity, servernum):
         self.service = service
         self.servers = [None]*servernum
+        self.env = env
         for i in range(servernum):
-            self.servers[i] = Server(env, None, i, self.service)
+            self.servers[i] = Server(self.env, None, i, self.service)
         self.maxCapacity = maxCapacity
         self.capacity = 0
         self.full = False
@@ -118,13 +117,17 @@ class Generator:
             print(self.jobs[0])
 
             if len(self.jobs) != 0:
-                print(len(self.jobs), ' ', self.jobs[0].service)
                 if not self.departments[self.jobs[0].service].full:
                     self.departments[self.jobs[0].service].add_customer(self.jobs.pop(0))
 
-            for k in range(len(self.departments)):
+            for k in range(department_num):
                 if len(self.departments[k].jobs) != 0:
                     self.departments[k].push()
+
+            for k in range(department_num):
+                for h in range(c):
+                    if not self.departments[k].servers[h].standBy.triggered:
+                        self.departments[k].servers[h].standBy.interrupt('customer came')
 
             i += 1
 
@@ -138,3 +141,6 @@ for i in range(department_num):
 simulationGen = Generator(env, serviceDepartments, population, lamda, mu, c)
 
 env.run( until = simulation_time)
+
+print (serviceDepartments[0].servers[0].servingTime)
+print (serviceDepartments[1].servers[0].servingTime)
