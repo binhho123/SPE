@@ -8,7 +8,7 @@ lamda = 1/6
 mu = 1/20
 c = 5
 department_num = 3
-simulation_time = 100
+simulation_time = 60000
 maxCapacity = 100
 population = 10000
 randarray = np.arange(0, department_num, 1)
@@ -44,8 +44,8 @@ class Server:
                 yield self.standBy
                 self.idleTime += env.now - t
             else:
-                self.waitingTime += env.now - self.job.arrtime
                 t = env.now
+                self.waitingTime += t - self.job.arrtime
                 yield self.env.timeout(self.job.duration)
                 self.servingTime += env.now - t
                 self.jobDone += 1
@@ -110,6 +110,7 @@ class Generator:
             job_interval = random.exponential(self.lamda)
             yield env.timeout(job_interval)
 
+            self.job_num -= 1
             job_duration = random.exponential(self.mu)
             job_service = random.choice(randarray)
 
@@ -142,5 +143,23 @@ simulationGen = Generator(env, serviceDepartments, population, lamda, mu, c)
 
 env.run( until = simulation_time)
 
-print (serviceDepartments[0].servers[0].servingTime)
-print (serviceDepartments[1].servers[0].servingTime)
+served_customers = [0] * department_num
+for i in range(department_num):
+    for k in range(c):
+        served_customers[i] += serviceDepartments[i].servers[k].jobDone
+
+average_serving_time = [0] * department_num
+for i in range(department_num):
+    for k in range(c):
+        average_serving_time[i] += serviceDepartments[i].servers[k].servingTime
+    average_serving_time[i] /= c
+
+average_waiting_time = [0] * department_num
+for i in range(department_num):
+    for k in range(c):
+        average_waiting_time[i] += serviceDepartments[i].servers[k].waitingTime
+    average_waiting_time[i] /= c
+
+print(served_customers)
+print(average_serving_time)
+print(average_waiting_time)
