@@ -11,7 +11,7 @@ department_num = 3
 simulation_time = 60000
 maxCapacity = 100
 population = 10000
-randarray = np.arange(0, department_num, 1)
+randarray = np.arange(1, department_num + 1, 1)
 
 class Customer:
     def __init__(self, id, service, arrtime, duration):
@@ -47,9 +47,19 @@ class Server:
                 t = env.now
                 self.waitingTime += t - self.job.arrtime
                 yield self.env.timeout(self.job.duration)
+                if self.service == 0:
+                    self.job.service = random.choice(randarray)
+                    self.job.duration = random.exponential(lamda)
+                    serviceDepartments[self.job.service].add_customer(self.job)
+                else:
+                    feedback = random.choice([0, 1], [0.8, 0.2])
+                    if feedback:
+                        self.job.service = random.choice(randarray)
+                        self.job.service = 0
+                        entrance_department.add_customer(self.job)
+                self.job = None
                 self.servingTime += env.now - t
                 self.jobDone += 1
-                self.job = None
                 serviceDepartments[self.service].availableStatus[self.server_id] = 1
 
     def waiting(self, env):
@@ -62,11 +72,13 @@ class Department:
     def __init__(self, env, service, maxCapacity, servernum):
         self.service = service
         self.servers = [None]*servernum
+        self.servernum = servernum
         self.env = env
         for i in range(servernum):
             self.servers[i] = Server(self.env, None, i, self.service)
         self.maxCapacity = maxCapacity
         self.capacity = 0
+        self.leaveNum = 0
         self.full = False
         self.jobs = list()
         self.availableStatus = [None]*servernum
@@ -75,6 +87,7 @@ class Department:
 
     def add_customer(self, customer):
 
+        customer.arrtime = self.env.now
         self.jobs.append(customer)
         self.capacity += 1
         if self.capacity == self.maxCapacity:
@@ -93,8 +106,9 @@ class Department:
                     self.full = False
 
 class Generator:
-    def __init__(self, env, departments, job_num, lamda, mu, c):
+    def __init__(self, env, departments, entrance_department, job_num, lamda, mu, c):
         self.departments = departments
+        self.entrance_department = entrance_department
         self.job_num = job_num
         self.lamda = lamda
         self.mu = mu
@@ -110,16 +124,20 @@ class Generator:
             job_interval = random.exponential(self.lamda)
             yield env.timeout(job_interval)
 
-            self.job_num -= 1
             job_duration = random.exponential(self.mu)
-            job_service = random.choice(randarray)
 
-            self.jobs.append(Customer(i, job_service, env.now, job_duration))
+            self.jobs.append(Customer(i, 0, env.now, job_duration))
             print(self.jobs[0])
 
             if len(self.jobs) != 0:
-                if not self.departments[self.jobs[0].service].full:
-                    self.departments[self.jobs[0].service].add_customer(self.jobs.pop(0))
+                if not self.entrance_department.full:
+                    self.entrance_department.add_customer(self.jobs.pop(0))
+                else:
+                    self.jobs.pop(0)
+                    self.entrance_department.leaveNum += 1
+
+            if len(self.entrance_department.jobs) != 0:
+                self.entrance_department.push()
 
             for k in range(department_num):
                 if len(self.departments[k].jobs) != 0:
@@ -136,12 +154,15 @@ class Generator:
 env = simpy.Environment()
 
 serviceDepartments = [None] * department_num
+
 for i in range(department_num):
-    serviceDepartments[i] = Department(env, i, maxCapacity, c)
+    serviceDepartments[i] = Department(env, i + 1, maxCapacity, c)
 
-simulationGen = Generator(env, serviceDepartments, population, lamda, mu, c)
+entrance_department = Department(env, 0, maxCapacity, 2)
 
-env.run( until = simulation_time)
+simulationGen = Generator(env, serviceDepartments, entrance_department, population, lamda, mu, c)
+
+env.run(until = simulation_time)
 
 served_customers = [0] * department_num
 for i in range(department_num):
