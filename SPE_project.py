@@ -6,7 +6,7 @@ import simpy
 num_customer = 10
 service_time = 2
 lamda = 1/6
-mu = 1/20
+mu = [1/5, 1/5, 1/5, 1/5, 1/5]
 c = 3
 leave_rate = 0.2
 department_num = 4
@@ -61,7 +61,7 @@ class Server:
                 if self.service == 0:
                     self.job.service = 1
                     self.job.arrtime = self.env.now
-                    self.job.duration = random.expovariate(mu)
+                    self.job.duration = random.expovariate(1 / mu[1])
                     simulationGen.joblist[1].append(self.job)
                     entrance_department.availableStatus[self.server_id] = 1
                     '''Trigger add process of next queue node's department, if haven't done'''
@@ -73,7 +73,7 @@ class Server:
 
                 elif self.service == 1:
                     self.job.service = random.choices(randarray, weights =(25, 25, 25, 25), k = 1)[0]
-                    self.job.duration = random.expovariate(mu)
+                    self.job.duration = random.expovariate(1 / mu[self.job.service - 2])
                     self.job.arrtime = self.env.now
                     simulationGen.joblist[2].append(self.job)
                     select_department.availableStatus[self.server_id] = 1
@@ -90,7 +90,8 @@ class Server:
                         s = self.job.service
                         self.job.service = 0
                         self.job.arrtime = self.env.now
-                        self.job.duration = random.expovariate(mu)
+                        ''''''
+                        self.job.duration = random.expovariate(1 / mu[1])
                         simulationGen.joblist[1].append(self.job)
                         '''Trigger add process of next queue node's department, if haven't done'''
                         if not simulationGen.entrance_department.no_push.triggered:
@@ -210,10 +211,10 @@ class Generator:
 
         i = 1
         while True:
-            job_interval = random.expovariate(self.lamda)
+            job_interval = numpy.random.poisson(1 / self.lamda, size = None)
             yield env.timeout(job_interval)
 
-            job_duration = random.expovariate(self.mu)
+            job_duration = random.expovariate(1 / self.mu [0])
 
             self.joblist[0].append(Customer(i, 0, env.now, job_duration))
             print(self.joblist[0][0])
@@ -274,7 +275,7 @@ average_waiting_time_node2 = [0]
 average_waiting_time_node3 = [0] * department_num
 average_waiting_time = [average_waiting_time_node1, average_waiting_time_node2, average_waiting_time_node3]
 
-for k in range(3):
+for k in range(c):
     average_waiting_time_node2[0] += select_department.servers[k].waitingTime
 average_waiting_time_node2[0] /= c
 average_waiting_time_node2[0] /= served_customers_node2[0] + 1e-9
