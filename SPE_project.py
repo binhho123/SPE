@@ -10,7 +10,7 @@ mu = 1/20
 c = 3
 leave_rate = 0.2
 department_num = 4
-simulation_time = 100
+simulation_time = 1000
 maxCapacity = 100
 population = 10000
 randarray = numpy.arange(0+2, department_num + 2, 1)
@@ -143,11 +143,11 @@ class Department:
                     self.capacity += 1
                     if self.capacity == self.maxCapacity:
                         self.full = True
-                    print(self.service,'add customer',self.jobs[self.capacity-1].id,'at',env.now)
+                    print(self.service,'add customer',self.jobs[self.capacity-1].id,'need',self.jobs[self.capacity-1].service,'at',env.now)
                     if not self.no_push.triggered:
                         self.no_push.interrupt('customer came')
                 else:
-                    print('customer', self.jobs.id, 'left', self.queue_no)
+                    print('customer', simulationGen.joblist[self.queue_no][0], 'left', self.queue_no)
                     simulationGen.joblist[self.queue_no].pop(0)
                     self.leaveNum += 1
                     if not self.no_push.triggered:
