@@ -12,7 +12,7 @@ department_num = 4
 simulation_time = 100
 maxCapacity = 100
 population = 10000
-randarray = numpy.arange(1, department_num + 1, 1)
+randarray = numpy.arange(0+2, department_num + 2, 1)
 queue_note = 3
 
 class Customer:
@@ -162,8 +162,8 @@ class Generator:
                 if not self.select_department.full:
                     self.select_department.add_customer(self.joblist[1].pop(0))
             if len(self.joblist[2]) != 0:
-                if not self.departments[self.joblist[2][0].service].full:
-                    self.departments[self.joblist[2][0].service].add_customer(self.joblist[2].pop(0))
+                if not self.departments[self.joblist[2][0].service - 2].full:
+                    self.departments[self.joblist[2][0].service - 2].add_customer(self.joblist[2].pop(0))
 
             if len(self.entrance_department.jobs) != 0:
                 self.entrance_department.push()
