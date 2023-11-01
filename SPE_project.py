@@ -13,6 +13,7 @@ simulation_time = 100
 maxCapacity = 100
 population = 10000
 randarray = numpy.arange(1, department_num + 1, 1)
+queue_note = 3
 
 class Customer:
     def __init__(self, id, service, arrtime, duration):
@@ -47,7 +48,7 @@ class Server:
                 self.idleTime += env.now - t
 
             else:
-                print(self.server_id,' ','process',' ', self.job.id)
+                print(self.server_id,'process', self.job.id,'at',env.now)
                 t = env.now
                 self.waitingTime += t - self.job.arrtime
                 yield self.env.timeout(self.job.duration)
@@ -55,24 +56,26 @@ class Server:
                     self.job.service = 1
                     self.job.arrtime = self.env.now
                     self.job.duration = random.expovariate(mu)
-                    select_department.add_customer(self.job)
+                    simulationGen.joblist[1].append(self.job)
                     entrance_department.availableStatus[self.server_id] = 1
-                    print('move ',self.job.id, ' to queue 1')
+
                 elif self.service == 1:
                     self.job.service = random.choices(randarray, weights =(25, 25, 25, 25), k = 1)[0]
                     self.job.duration = random.expovariate(mu)
                     self.job.arrtime = self.env.now
-                    serviceDepartments[self.job.service - 2].add_customer(self.job)
+                    simulationGen.joblist[2].append(self.job)
                     select_department.availableStatus[self.server_id] = 1
-                    print('move ',self.job.id, ' to queue ',self.job.service)
+
                 else:
                     feedback = random.choices([0, 1], weights =(10, 90), k = 1)[0]
                     if feedback == 1:
                         self.job.service = 0
                         self.job.arrtime = self.env.now
                         self.job.duration = random.expovariate(mu)
-                        entrance_department.add_customer(self.job)
+                        simulationGen.joblist[0].append(self.job)
                     serviceDepartments[self.service - 2].availableStatus[self.server_id] = 1
+
+                print(self.service, 'finish',self.job.id,'at',env.now)
                 self.job = None
                 self.servingTime += env.now - t
                 self.jobDone += 1
@@ -100,7 +103,6 @@ class Department:
         self.availableStatus = [None]*servernum
         for i in range(servernum):
             self.availableStatus[i] = 1
-        self.env.process(self.queueing())
 
     def add_customer(self, customer):
 
@@ -109,10 +111,7 @@ class Department:
         self.capacity += 1
         if self.capacity == self.maxCapacity:
             self.full = True
-        if self.hold is not None:
-            if not self.hold.triggered:
-                self.hold.interrupt('customer came')
-        print('add customer ',self.jobs[0].id)
+        print(self.service,'add customer',customer.id)
 
     def push(self):
         x = sum(self.availableStatus)
@@ -123,29 +122,11 @@ class Department:
                 self.servers[customerToServeList[i]].job = self.jobs.pop(0)
                 if not self.servers[customerToServeList[i]].standBy.triggered:
                     self.servers[customerToServeList[i]].standBy.interrupt('customer came')
-                print('push ', self.servers[customerToServeList[i]].job)
-                print(self.servers[customerToServeList[i]].job == None)
+                print('queue', self.service, 'push', self.servers[customerToServeList[i]].job.id,'at', env.now)
                 self.availableStatus[customerToServeList[i]] = 0
                 self.capacity -= 1
                 if self.full == True:
                     self.full == False
-
-
-    def queueing(self):
-
-        while True:
-            if len(self.jobs) == 0 or self.full is True or sum(self.availableStatus) == 0:
-                self.hold = self.env.process(self.Hold(self.env))
-                yield self.hold
-
-            else:
-                self.push()
-
-    def Hold(self, env):
-        try:
-            yield env.timeout(simulation_time)
-        except simpy.Interrupt as i:
-            pass
 
 class Generator:
     def __init__(self, env, departments, select_department, entrance_department, job_num, lamda, mu, c):
@@ -157,29 +138,40 @@ class Generator:
         self.lamda = lamda
         self.mu = mu
         self.c = c
-        self.jobs = list()
+        self.joblist = list()
+        for i in range(queue_note):
+            self.joblist.append(list())
         self.env.process(self.generate_customer(self.env))
 
     def generate_customer(self, env):
 
         i = 1
         while True:
-            print('in')
             job_interval = random.expovariate(self.lamda)
-            print('wait ', job_interval)
             yield env.timeout(job_interval)
 
             job_duration = random.expovariate(self.mu)
 
-            self.jobs.append(Customer(i, 0, env.now, job_duration))
-            print(self.jobs[0])
+            self.joblist[0].append(Customer(i, 0, env.now, job_duration))
+            print(self.joblist[0][0])
 
-            if len(self.jobs) != 0:
+            if len(self.joblist[0]) != 0:
                 if not self.entrance_department.full:
-                    self.entrance_department.add_customer(self.jobs.pop(0))
-                else:
-                    self.jobs.pop(0)
-                    self.entrance_department.leaveNum += 1
+                    self.entrance_department.add_customer(self.joblist[0].pop(0))
+            if len(self.joblist[1]) != 0:
+                if not self.select_department.full:
+                    self.select_department.add_customer(self.joblist[1].pop(0))
+            if len(self.joblist[2]) != 0:
+                if not self.departments[self.joblist[2][0].service].full:
+                    self.departments[self.joblist[2][0].service].add_customer(self.joblist[2].pop(0))
+
+            if len(self.entrance_department.jobs) != 0:
+                self.entrance_department.push()
+            if len(self.select_department.jobs) != 0:
+                self.select_department.push()
+            for k in range(department_num):
+                if len(self.departments[k].jobs) != 0:
+                    self.departments[k].push()
 
             i += 1
 
