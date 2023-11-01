@@ -9,8 +9,8 @@ lamda = 1/6
 mu = [1/5, 1/5, 1/5, 1/5, 1/5]
 c = 3
 leave_rate = 0.2
-department_num = 4
-simulation_time = 1000
+department_num = 3
+simulation_time = 2000
 maxCapacity = 100
 population = 10000
 randarray = numpy.arange(0+2, department_num + 2, 1)
@@ -72,7 +72,7 @@ class Server:
                         simulationGen.entrance_department.no_push.interrupt('customer came')
 
                 elif self.service == 1:
-                    self.job.service = random.choices(randarray, weights =(25, 25, 25, 25), k = 1)[0]
+                    self.job.service = random.choices(randarray, weights =(1/3, 1/3, 1/3), k = 1)[0]
                     self.job.duration = random.expovariate(1 / mu[self.job.service - 2])
                     self.job.arrtime = self.env.now
                     simulationGen.joblist[2].append(self.job)
@@ -90,7 +90,7 @@ class Server:
                         s = self.job.service
                         self.job.service = 0
                         self.job.arrtime = self.env.now
-                        ''''''
+                        '''random task duration base on mu 1'''
                         self.job.duration = random.expovariate(1 / mu[1])
                         simulationGen.joblist[1].append(self.job)
                         '''Trigger add process of next queue node's department, if haven't done'''
