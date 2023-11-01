@@ -1,12 +1,13 @@
 import numpy
 import random
 import simpy
+import matplotlib.pyplot as plt
 
 '''Pre-set parameters'''
 num_customer = 10
 service_time = 2
 lamda = 1/6
-mu = [1/5, 1/5, 1/5, 1/5, 1/5]
+mu = [4, 4, 4, 4, 4]
 c = 3
 leave_rate = 0.2
 department_num = 3
@@ -16,6 +17,10 @@ population = 10000
 randarray = numpy.arange(0+2, department_num + 2, 1)
 feedBack_rate = 0.2
 queue_note = 3
+
+queue_lenght_y = numpy.zeros((5, simulation_time),dtype = 'int')
+customer_id = numpy.empty((simulation_time))
+arrive_time = numpy.empty((simulation_time))
 
 class Customer:
     def __init__(self, id, service, arrtime, duration):
@@ -147,6 +152,10 @@ class Department:
                     print(self.service,'add customer',self.jobs[self.capacity-1].id,'need',self.jobs[self.capacity-1].service,'at',env.now)
                     if not self.no_push.triggered:
                         self.no_push.interrupt('customer came')
+
+                    '''log queue length'''
+                    queue_lenght_y[self.service][int(env.now)] = self.capacity
+
                 else:
                     print('customer', simulationGen.joblist[self.queue_no][0], 'left', self.queue_no)
                     simulationGen.joblist[self.queue_no].pop(0)
@@ -176,6 +185,7 @@ class Department:
                         self.full == False
                     if not self.no_add.triggered:
                         self.no_add.interrupt('customer came')
+
             else:
                 self.no_push = env.process(self.dont_push(self.env))
                 yield self.no_push
@@ -215,6 +225,9 @@ class Generator:
             yield env.timeout(job_interval)
 
             job_duration = random.expovariate(1 / self.mu [0])
+
+            customer_id[i] = i
+            arrive_time[i] = env.now
 
             self.joblist[0].append(Customer(i, 0, env.now, job_duration))
             print(self.joblist[0][0])
@@ -302,3 +315,40 @@ for i in range(department_num):
 print(served_customers)
 print(average_serving_time)
 print(average_waiting_time)
+
+t = numpy.arange(0, 4000, 1)
+
+plt.plot(t, queue_lenght_y[0])
+plt.xlabel("Queue 0 length")
+plt.ylabel("time")
+
+plt.show()
+plt.plot(t, queue_lenght_y[1])
+plt.ylabel("Queue 1 length")
+plt.xlabel("Time")
+
+plt.show()
+
+plt.plot(t, queue_lenght_y[2])
+plt.ylabel("Queue 2 length")
+plt.xlabel("Time")
+
+plt.show()
+
+plt.plot(t, queue_lenght_y[3])
+plt.ylabel("Queue 3 length")
+plt.xlabel("Time")
+
+plt.show()
+
+plt.plot(t, queue_lenght_y[4])
+plt.ylabel("Queue 4 length")
+plt.xlabel("Time")
+
+plt.show()
+
+plt.plot(customer_id, arrive_time)
+plt.xlabel("Customer ID")
+plt.ylabel("Arrival time")
+
+plt.show()
