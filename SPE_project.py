@@ -1,5 +1,5 @@
-import numpy as np
-from numpy import random
+import numpy
+import random
 import simpy
 
 num_customer = 10
@@ -7,11 +7,12 @@ service_time = 2
 lamda = 1/6
 mu = 1/20
 c = 5
-department_num = 3
-simulation_time = 60000
+leave_rate = 0.2
+department_num = 4
+simulation_time = 100
 maxCapacity = 100
 population = 10000
-randarray = np.arange(1, department_num + 1, 1)
+randarray = numpy.arange(1, department_num + 1, 1)
 
 class Customer:
     def __init__(self, id, service, arrtime, duration):
@@ -38,29 +39,43 @@ class Server:
     def serve(self):
 
         while True:
+
             if self.job is None:
                 self.standBy = env.process(self.waiting(self.env))
                 t = env.now
                 yield self.standBy
                 self.idleTime += env.now - t
+
             else:
+                print(self.server_id,' ','process',' ', self.job.id)
                 t = env.now
                 self.waitingTime += t - self.job.arrtime
                 yield self.env.timeout(self.job.duration)
                 if self.service == 0:
-                    self.job.service = random.choice(randarray)
-                    self.job.duration = random.exponential(lamda)
-                    serviceDepartments[self.job.service].add_customer(self.job)
+                    self.job.service = 1
+                    self.job.arrtime = self.env.now
+                    self.job.duration = random.expovariate(mu)
+                    select_department.add_customer(self.job)
+                    entrance_department.availableStatus[self.server_id] = 1
+                    print('move ',self.job.id, ' to queue 1')
+                elif self.service == 1:
+                    self.job.service = random.choices(randarray, weights =(25, 25, 25, 25), k = 1)[0]
+                    self.job.duration = random.expovariate(mu)
+                    self.job.arrtime = self.env.now
+                    serviceDepartments[self.job.service - 2].add_customer(self.job)
+                    select_department.availableStatus[self.server_id] = 1
+                    print('move ',self.job.id, ' to queue ',self.job.service)
                 else:
-                    feedback = random.choice([0, 1], [0.8, 0.2])
-                    if feedback:
-                        self.job.service = random.choice(randarray)
+                    feedback = random.choices([0, 1], weights =(10, 90), k = 1)[0]
+                    if feedback == 1:
                         self.job.service = 0
+                        self.job.arrtime = self.env.now
+                        self.job.duration = random.expovariate(mu)
                         entrance_department.add_customer(self.job)
+                    serviceDepartments[self.service - 2].availableStatus[self.server_id] = 1
                 self.job = None
                 self.servingTime += env.now - t
                 self.jobDone += 1
-                serviceDepartments[self.service].availableStatus[self.server_id] = 1
 
     def waiting(self, env):
             try:
@@ -80,10 +95,12 @@ class Department:
         self.capacity = 0
         self.leaveNum = 0
         self.full = False
+        self.hold = None
         self.jobs = list()
         self.availableStatus = [None]*servernum
         for i in range(servernum):
             self.availableStatus[i] = 1
+        self.env.process(self.queueing())
 
     def add_customer(self, customer):
 
@@ -92,39 +109,67 @@ class Department:
         self.capacity += 1
         if self.capacity == self.maxCapacity:
             self.full = True
+        if self.hold is not None:
+            if not self.hold.triggered:
+                self.hold.interrupt('customer came')
+        print('add customer ',self.jobs[0].id)
 
     def push(self):
         x = sum(self.availableStatus)
         if x != 0:
             h = min(x, len(self.jobs))
-            customerToServeList = np.argsort(self.availableStatus)
+            customerToServeList = numpy.argsort(self.availableStatus)
             for i in range(h):
                 self.servers[customerToServeList[i]].job = self.jobs.pop(0)
+                if not self.servers[customerToServeList[i]].standBy.triggered:
+                    self.servers[customerToServeList[i]].standBy.interrupt('customer came')
+                print('push ', self.servers[customerToServeList[i]].job)
+                print(self.servers[customerToServeList[i]].job == None)
                 self.availableStatus[customerToServeList[i]] = 0
                 self.capacity -= 1
                 if self.full == True:
-                    self.full = False
+                    self.full == False
+
+
+    def queueing(self):
+
+        while True:
+            if len(self.jobs) == 0 or self.full is True or sum(self.availableStatus) == 0:
+                self.hold = self.env.process(self.Hold(self.env))
+                yield self.hold
+
+            else:
+                self.push()
+
+    def Hold(self, env):
+        try:
+            yield env.timeout(simulation_time)
+        except simpy.Interrupt as i:
+            pass
 
 class Generator:
-    def __init__(self, env, departments, entrance_department, job_num, lamda, mu, c):
+    def __init__(self, env, departments, select_department, entrance_department, job_num, lamda, mu, c):
+        self.env = env
         self.departments = departments
+        self.select_department = select_department
         self.entrance_department = entrance_department
         self.job_num = job_num
         self.lamda = lamda
         self.mu = mu
         self.c = c
         self.jobs = list()
-
-        env.process(self.generate_customer(env))
+        self.env.process(self.generate_customer(self.env))
 
     def generate_customer(self, env):
 
         i = 1
         while True:
-            job_interval = random.exponential(self.lamda)
+            print('in')
+            job_interval = random.expovariate(self.lamda)
+            print('wait ', job_interval)
             yield env.timeout(job_interval)
 
-            job_duration = random.exponential(self.mu)
+            job_duration = random.expovariate(self.mu)
 
             self.jobs.append(Customer(i, 0, env.now, job_duration))
             print(self.jobs[0])
@@ -136,31 +181,16 @@ class Generator:
                     self.jobs.pop(0)
                     self.entrance_department.leaveNum += 1
 
-            if len(self.entrance_department.jobs) != 0:
-                self.entrance_department.push()
-
-            for k in range(department_num):
-                if len(self.departments[k].jobs) != 0:
-                    self.departments[k].push()
-
-            for k in range(department_num):
-                for h in range(c):
-                    if not self.departments[k].servers[h].standBy.triggered:
-                        self.departments[k].servers[h].standBy.interrupt('customer came')
-
             i += 1
-
 
 env = simpy.Environment()
 
 serviceDepartments = [None] * department_num
-
 for i in range(department_num):
-    serviceDepartments[i] = Department(env, i + 1, maxCapacity, c)
-
-entrance_department = Department(env, 0, maxCapacity, 2)
-
-simulationGen = Generator(env, serviceDepartments, entrance_department, population, lamda, mu, c)
+    serviceDepartments[i] = Department(env, i + 2, maxCapacity, c)
+select_department = Department(env, 1, maxCapacity, 3)
+entrance_department = Department(env, 0, maxCapacity, 1)
+simulationGen = Generator(env, serviceDepartments, select_department, entrance_department, population, lamda, mu, c)
 
 env.run(until = simulation_time)
 
