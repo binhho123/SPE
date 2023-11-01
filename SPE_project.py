@@ -64,8 +64,12 @@ class Server:
                     self.job.duration = random.expovariate(mu)
                     simulationGen.joblist[1].append(self.job)
                     entrance_department.availableStatus[self.server_id] = 1
+                    '''Trigger add process of next queue node's department, if haven't done'''
                     if not simulationGen.select_department.no_add.triggered:
                         simulationGen.select_department.no_add.interrupt('customer came')
+                    '''Trigger push process of current queue node's department, if haven't done'''
+                    if not simulationGen.entrance_department.no_push.triggered:
+                        simulationGen.entrance_department.no_push.interrupt('customer came')
 
                 elif self.service == 1:
                     self.job.service = random.choices(randarray, weights =(25, 25, 25, 25), k = 1)[0]
@@ -73,18 +77,27 @@ class Server:
                     self.job.arrtime = self.env.now
                     simulationGen.joblist[2].append(self.job)
                     select_department.availableStatus[self.server_id] = 1
+                    '''Trigger add process of next queue node's department, if haven't done'''
                     if not simulationGen.departments[self.job.service - 2].no_add.triggered:
                         simulationGen.departments[self.job.service - 2].no_add.interrupt('customer came')
+                    '''Trigger push process of current queue node's department, if haven't done'''
+                    if not simulationGen.select_department.no_push.triggered:
+                        simulationGen.select_department.no_push.interrupt('customer came')
 
                 else:
                     feedback = random.choices([0, 1], weights =(1-feedBack_rate , feedBack_rate), k = 1)[0]
                     if feedback == 1:
+                        s = self.job.service
                         self.job.service = 0
                         self.job.arrtime = self.env.now
                         self.job.duration = random.expovariate(mu)
                         simulationGen.joblist[1].append(self.job)
-                        if not simulationGen.entrance_department.no_add.triggered:
-                            simulationGen.entrance_department.no_add.interrupt('customer came')
+                        '''Trigger add process of next queue node's department, if haven't done'''
+                        if not simulationGen.entrance_department.no_push.triggered:
+                            simulationGen.entrance_department.no_push.interrupt('customer came')
+                        '''Trigger push process of current queue node's department, if haven't done'''
+                        if not simulationGen.departments[s - 2].no_add.triggered:
+                            simulationGen.departments[s - 2].no_add.interrupt('customer came')
                     serviceDepartments[self.service - 2].availableStatus[self.server_id] = 1
 
                 print(self.service, 'finish',self.job.id,'at',env.now)
@@ -121,23 +134,25 @@ class Department:
         self.env.process(self.add_customer())
 
     def add_customer(self):
+
         while True:
-            '''Add customer to queue'''
+            '''if department queue not full and there is a waiting customer, add customer to queue'''
             if not self.full and len(simulationGen.joblist[self.queue_no]) != 0:
                 self.jobs.append(simulationGen.joblist[self.queue_no].pop(0))
                 self.capacity += 1
                 if self.capacity == self.maxCapacity:
                     self.full = True
-                print(self.service,'add customer',self.jobs[0].id,'at',env.now)
+                print(self.service,'add customer',self.jobs[self.capacity-1].id,'at',env.now)
                 if not self.no_push.triggered:
                     self.no_push.interrupt('customer came')
             else:
                 self.no_add = env.process(self.dont_add(self.env))
                 yield self.no_add
+
     def push(self):
 
-        '''Push customer to available servers to be served'''
         while True:
+            '''if department queue not full and there is a waiting customer, add customer to queue'''
             if self.capacity != 0 and 1 in self.availableStatus:
                 x = sum(self.availableStatus)
                 h = min(x, len(self.jobs))
@@ -146,7 +161,7 @@ class Department:
                     self.servers[customerToServeList[i]].job = self.jobs.pop(0)
                     if not self.servers[customerToServeList[i]].standBy.triggered:
                         self.servers[customerToServeList[i]].standBy.interrupt('customer came')
-                    print('queue', self.service, 'push', self.servers[customerToServeList[i]].job.id,'at', env.now)
+                    print(self.service, 'push', self.servers[customerToServeList[i]].job.id,'at', env.now)
                     self.availableStatus[customerToServeList[i]] = 0
                     self.capacity -= 1
                     if self.full == True:
@@ -219,22 +234,45 @@ simulationGen = Generator(env, serviceDepartments, select_department, entrance_d
 
 env.run(until = simulation_time)
 
-served_customers = [0] * department_num
-for i in range(department_num):
-    for k in range(c):
-        served_customers[i] += serviceDepartments[i].servers[k].jobDone
+served_customers_node1 = [entrance_department.servers[0].jobDone]
+served_customers_node2 = [0]
+served_customers_node3 = [0] * department_num
+served_customers = [served_customers_node1, served_customers_node2, served_customers_node3]
 
-average_serving_time = [0] * department_num
-for i in range(department_num):
-    for k in range(c):
-        average_serving_time[i] += serviceDepartments[i].servers[k].servingTime
-    average_serving_time[i] /= c
+for i in range(3):
+    served_customers_node2[0] += select_department.servers[i].jobDone
 
-average_waiting_time = [0] * department_num
 for i in range(department_num):
     for k in range(c):
-        average_waiting_time[i] += serviceDepartments[i].servers[k].waitingTime
-    average_waiting_time[i] /= c
+        served_customers_node3[i] += serviceDepartments[i].servers[k].jobDone
+
+average_serving_time_node1 = [entrance_department.servers[0].servingTime]
+average_serving_time_node2 = [0]
+average_serving_time_node3 = [0] * department_num
+average_serving_time = [average_serving_time_node1, average_serving_time_node2, average_serving_time_node3]
+
+for k in range(3):
+    average_serving_time_node2[0] += select_department.servers[k].servingTime
+average_serving_time_node2[0] /= 3
+
+for i in range(department_num):
+    for k in range(c):
+        average_serving_time_node3[i] += serviceDepartments[i].servers[k].servingTime
+    average_serving_time_node3[i] /= c
+
+average_waiting_time_node1 = [entrance_department.servers[0].waitingTime]
+average_waiting_time_node2 = [0]
+average_waiting_time_node3 = [0] * department_num
+average_waiting_time = [average_waiting_time_node1, average_waiting_time_node2, average_waiting_time_node3]
+
+for k in range(3):
+    average_waiting_time_node2[0] += select_department.servers[k].waitingTime
+average_waiting_time_node2[0] /= c
+
+for i in range(department_num):
+    for k in range(c):
+        average_waiting_time_node3[i] += serviceDepartments[i].servers[k].waitingTime
+    average_waiting_time_node3[i] /= c
 
 print(served_customers)
 print(average_serving_time)
