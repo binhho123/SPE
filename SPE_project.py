@@ -10,7 +10,7 @@ mu = [1/5, 1/5, 1/5, 1/5, 1/5]
 c = 3
 leave_rate = 0.2
 department_num = 3
-simulation_time = 2000
+simulation_time = 4000
 maxCapacity = 100
 population = 10000
 randarray = numpy.arange(0+2, department_num + 2, 1)
@@ -94,8 +94,8 @@ class Server:
                         self.job.duration = random.expovariate(1 / mu[1])
                         simulationGen.joblist[1].append(self.job)
                         '''Trigger add process of next queue node's department, if haven't done'''
-                        if not simulationGen.entrance_department.no_push.triggered:
-                            simulationGen.entrance_department.no_push.interrupt('customer came')
+                        if not simulationGen.select_department.no_push.triggered:
+                            simulationGen.select_department.no_push.interrupt('customer came')
                         '''Trigger push process of current queue node's department, if haven't done'''
                         if not simulationGen.departments[s - 2].no_add.triggered:
                             simulationGen.departments[s - 2].no_add.interrupt('customer came')
@@ -234,18 +234,21 @@ serviceDepartments = [None] * department_num
 for i in range(department_num):
     serviceDepartments[i] = Department(env, i + 2, maxCapacity, c, 2)
 '''2nd queue node with 1 department, 3 servers for service department selection'''
-select_department = Department(env, 1, maxCapacity, 3, 1)
+select_department = Department(env, 1, maxCapacity, c, 1)
 '''1st queue node with 1 department, 1 servers'''
-entrance_department = Department(env, 0, maxCapacity, 1, 0)
+entrance_department = Department(env, 0, maxCapacity, c, 0)
 
 simulationGen = Generator(env, serviceDepartments, select_department, entrance_department, population, lamda, mu, c)
 
 env.run(until = simulation_time)
 
-served_customers_node1 = [entrance_department.servers[0].jobDone]
+served_customers_node1 = [0]
 served_customers_node2 = [0]
 served_customers_node3 = [0] * department_num
 served_customers = [served_customers_node1, served_customers_node2, served_customers_node3]
+
+for i in range(3):
+    served_customers_node1[0] += entrance_department.servers[i].jobDone
 
 for i in range(3):
     served_customers_node2[0] += select_department.servers[i].jobDone
@@ -254,10 +257,15 @@ for i in range(department_num):
     for k in range(c):
         served_customers_node3[i] += serviceDepartments[i].servers[k].jobDone
 
-average_serving_time_node1 = [entrance_department.servers[0].servingTime / served_customers_node1[0]]
+average_serving_time_node1 = [0]
 average_serving_time_node2 = [0]
 average_serving_time_node3 = [0] * department_num
 average_serving_time = [average_serving_time_node1, average_serving_time_node2, average_serving_time_node3]
+
+for k in range(3):
+    average_serving_time_node1[0] += entrance_department.servers[k].servingTime
+average_serving_time_node1[0] /= 3
+average_serving_time_node1[0] /= served_customers_node2[0] + 1e-9
 
 for k in range(3):
     average_serving_time_node2[0] += select_department.servers[k].servingTime
@@ -270,10 +278,15 @@ for i in range(department_num):
     average_serving_time_node3[i] /= c
     average_serving_time_node3[i] /= served_customers_node3[i] + 1e-9
 
-average_waiting_time_node1 = [entrance_department.servers[0].waitingTime / served_customers_node1[0]]
+average_waiting_time_node1 = [0]
 average_waiting_time_node2 = [0]
 average_waiting_time_node3 = [0] * department_num
 average_waiting_time = [average_waiting_time_node1, average_waiting_time_node2, average_waiting_time_node3]
+
+for k in range(c):
+    average_waiting_time_node1[0] += entrance_department.servers[k].waitingTime
+average_waiting_time_node1[0] /= c
+average_waiting_time_node1[0] /= served_customers_node2[0] + 1e-9
 
 for k in range(c):
     average_waiting_time_node2[0] += select_department.servers[k].waitingTime
