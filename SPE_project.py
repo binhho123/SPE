@@ -13,7 +13,7 @@ leave_rate = 0.2
 department_num = 3
 simulation_time = 4000
 maxCapacity = 100
-population = 10000
+population = 4000
 randarray = numpy.arange(0+2, department_num + 2, 1)
 feedBack_rate = 0.2
 queue_note = 3
@@ -21,6 +21,8 @@ queue_note = 3
 queue_lenght_y = numpy.zeros((5, simulation_time),dtype = 'int')
 customer_id = numpy.empty((simulation_time))
 arrive_time = numpy.empty((simulation_time))
+total_waiting_time = numpy.empty((simulation_time))
+total_serving_time = numpy.empty((simulation_time))
 
 class Customer:
     def __init__(self, id, service, arrtime, duration):
@@ -60,6 +62,7 @@ class Server:
                 print(self.server_id,'of',self.service,'process', self.job.id,'at',env.now)
                 t = env.now
                 self.waitingTime += t - self.job.arrtime
+                total_waiting_time[self.job.id] += t - self.job.arrtime
                 yield self.env.timeout(self.job.duration)
 
                 '''Dialling customer to next queue node'''
@@ -107,6 +110,7 @@ class Server:
                     serviceDepartments[self.service - 2].availableStatus[self.server_id] = 1
 
                 print(self.service, 'finish',self.job.id,'at',env.now)
+                total_serving_time[self.job.id] += env.now - t
                 self.job = None
                 self.servingTime += env.now - t
                 self.jobDone += 1
@@ -317,6 +321,18 @@ print(average_serving_time)
 print(average_waiting_time)
 
 t = numpy.arange(0, 4000, 1)
+
+plt.plot(t, total_waiting_time)
+plt.ylabel("Total waiting time")
+plt.xlabel("customer")
+
+plt.show()
+
+plt.plot(t, total_serving_time)
+plt.ylabel("Total serving time")
+plt.xlabel("customer")
+
+plt.show()
 
 plt.plot(t, queue_lenght_y[0])
 plt.xlabel("Queue 0 length")
