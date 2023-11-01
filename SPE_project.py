@@ -2,17 +2,19 @@ import numpy
 import random
 import simpy
 
+'''Pre-set parameters'''
 num_customer = 10
 service_time = 2
 lamda = 1/6
 mu = 1/20
-c = 5
+c = 3
 leave_rate = 0.2
 department_num = 4
 simulation_time = 100
 maxCapacity = 100
 population = 10000
 randarray = numpy.arange(0+2, department_num + 2, 1)
+feedBack_rate = 0.2
 queue_note = 3
 
 class Customer:
@@ -42,16 +44,20 @@ class Server:
         while True:
 
             if self.job is None:
+                '''If there is no customer to serve, server goes idle'''
                 self.standBy = env.process(self.waiting(self.env))
                 t = env.now
                 yield self.standBy
                 self.idleTime += env.now - t
 
             else:
+                '''Serving customer'''
                 print(self.server_id,'process', self.job.id,'at',env.now)
                 t = env.now
                 self.waitingTime += t - self.job.arrtime
                 yield self.env.timeout(self.job.duration)
+
+                '''Dialling customer to next queue node'''
                 if self.service == 0:
                     self.job.service = 1
                     self.job.arrtime = self.env.now
@@ -67,12 +73,12 @@ class Server:
                     select_department.availableStatus[self.server_id] = 1
 
                 else:
-                    feedback = random.choices([0, 1], weights =(10, 90), k = 1)[0]
+                    feedback = random.choices([0, 1], weights =(1-feedBack_rate , feedBack_rate), k = 1)[0]
                     if feedback == 1:
                         self.job.service = 0
                         self.job.arrtime = self.env.now
                         self.job.duration = random.expovariate(mu)
-                        simulationGen.joblist[0].append(self.job)
+                        simulationGen.joblist[1].append(self.job)
                     serviceDepartments[self.service - 2].availableStatus[self.server_id] = 1
 
                 print(self.service, 'finish',self.job.id,'at',env.now)
@@ -96,7 +102,7 @@ class Department:
             self.servers[i] = Server(self.env, None, i, self.service)
         self.maxCapacity = maxCapacity
         self.capacity = 0
-        self.leaveNum = 0
+        #self.leaveNum = 0
         self.full = False
         self.hold = None
         self.jobs = list()
@@ -106,14 +112,17 @@ class Department:
 
     def add_customer(self, customer):
 
+        '''Add customer to queue'''
         customer.arrtime = self.env.now
         self.jobs.append(customer)
         self.capacity += 1
         if self.capacity == self.maxCapacity:
             self.full = True
-        print(self.service,'add customer',customer.id)
+        print(self.service,'add customer',customer.id,'at',env.now)
 
     def push(self):
+
+        '''Push customer to available servers to be served'''
         x = sum(self.availableStatus)
         if x != 0:
             h = min(x, len(self.jobs))
@@ -155,6 +164,7 @@ class Generator:
             self.joblist[0].append(Customer(i, 0, env.now, job_duration))
             print(self.joblist[0][0])
 
+            '''Add customer from waited lists to corresponding queue nodes'''
             if len(self.joblist[0]) != 0:
                 if not self.entrance_department.full:
                     self.entrance_department.add_customer(self.joblist[0].pop(0))
@@ -165,6 +175,7 @@ class Generator:
                 if not self.departments[self.joblist[2][0].service - 2].full:
                     self.departments[self.joblist[2][0].service - 2].add_customer(self.joblist[2].pop(0))
 
+            '''Push presenting customers in each queue nodes'''
             if len(self.entrance_department.jobs) != 0:
                 self.entrance_department.push()
             if len(self.select_department.jobs) != 0:
@@ -173,15 +184,20 @@ class Generator:
                 if len(self.departments[k].jobs) != 0:
                     self.departments[k].push()
 
+            '''increase customer count'''
             i += 1
 
 env = simpy.Environment()
 
+'''3rd queue node with 4 service departments, each has 3 servers'''
 serviceDepartments = [None] * department_num
 for i in range(department_num):
     serviceDepartments[i] = Department(env, i + 2, maxCapacity, c)
+'''2nd queue node with 1 department, 3 servers for service department selection'''
 select_department = Department(env, 1, maxCapacity, 3)
+'''1st queue node with 1 department, 1 servers'''
 entrance_department = Department(env, 0, maxCapacity, 1)
+
 simulationGen = Generator(env, serviceDepartments, select_department, entrance_department, population, lamda, mu, c)
 
 env.run(until = simulation_time)
